@@ -51,6 +51,42 @@ struct Sprite {
 	uint8_t* data;
 };
 
+struct Alien {
+	size_t x, y;
+	uint8_t type;
+};
+
+struct Player {
+	size_t x, y;
+	size_t life;
+};
+
+struct Game {
+	size_t width, height;
+	size_t num_aliens;
+	Alien* aliens;
+	Player player;
+};
+
+struct SpriteAnimation {
+	bool loop;
+	/*"Loop" determines whether the animation should
+	repeat continuously or stop after playing once*/
+
+	size_t num_frames;
+	size_t frame_duration;
+	size_t time;
+
+	Sprite** frames;
+
+	/*Why do we use double pointers here?
+	
+	Later we will create a SpriteAnimation object using 'new' operator,
+	which returns the memory of the created object 
+	
+	To dynamically allocate the frame, we need to obtain its memory */
+};
+
 uint32_t rgb_to_uint32(uint8_t red, uint8_t green, uint8_t blue) {
 	return (red << 24) | (green << 16) | (blue << 8) | 255;
 }
@@ -264,10 +300,12 @@ int main() {
 	glDisable(GL_DEPTH_TEST);
 	glBindVertexArray(fullscreen_triangle_vao);
 
-	Sprite alien_sprite;
-	alien_sprite.width = 11;
-	alien_sprite.height = 8;
-	alien_sprite.data = new uint8_t[11 * 8]{
+	
+
+	Sprite alien_sprite0;
+	alien_sprite0.width = 11;
+	alien_sprite0.height = 8;
+	alien_sprite0.data = new uint8_t[11 * 8]{
 		0,0,1,0,0,0,0,0,1,0,0, // ..@.....@..
 		0,0,0,1,0,0,0,1,0,0,0, // ...@...@...
 		0,0,1,1,1,1,1,1,1,0,0, // ..@@@@@@@..
@@ -278,13 +316,90 @@ int main() {
 		0,0,0,1,1,0,1,1,0,0,0  // ...@@.@@...
 	};
 
+	Sprite alien_sprite1;
+	alien_sprite1.width = 11;
+	alien_sprite1.height = 8;
+	alien_sprite1.data = new uint8_t[11 * 8]{
+		0,0,1,0,0,0,0,0,1,0,0, // ..@.....@..
+		1,0,0,1,0,0,0,1,0,0,1, // @..@...@..@
+		1,0,1,1,1,1,1,1,1,0,1, // @.@@@@@@@.@
+		1,1,1,0,1,1,1,0,1,1,1, // @@@.@@@.@@@
+		1,1,1,1,1,1,1,1,1,1,1, // @@@@@@@@@@@
+		0,1,1,1,1,1,1,1,1,1,0, // .@@@@@@@@@.
+		0,0,1,0,0,0,0,0,1,0,0, // ..@.....@..
+		0,1,0,0,0,0,0,0,0,1,0  // .@.......@.
+	};
+
+	Sprite player_sprite;
+	player_sprite.width = 11;
+	player_sprite.height = 7;
+	player_sprite.data = new uint8_t[11 * 7]{
+		0,0,0,0,0,1,0,0,0,0,0, // .....@.....
+		0,0,0,0,1,1,1,0,0,0,0, // ....@@@....
+		0,0,0,0,1,1,1,0,0,0,0, // ....@@@....
+		0,1,1,1,1,1,1,1,1,1,0, // .@@@@@@@@@.
+		1,1,1,1,1,1,1,1,1,1,1, // @@@@@@@@@@@
+		1,1,1,1,1,1,1,1,1,1,1, // @@@@@@@@@@@
+		1,1,1,1,1,1,1,1,1,1,1, // @@@@@@@@@@@
+	};
+
+	SpriteAnimation* alien_animation = new SpriteAnimation;
+
+	//"new" operator returns the memory address of "SpriteAnimation"
+
+	alien_animation->loop = true;
+	alien_animation->num_frames = 2;
+	alien_animation->frame_duration = 10;
+	alien_animation->time = 0;
+
+	alien_animation->frames = new Sprite*[2];
+	alien_animation->frames[0] = &alien_sprite0;
+	alien_animation->frames[1] = &alien_sprite1;
+
+	Game game;
+	game.width = buffer.width;
+	game.height = buffer.height;
+	game.num_aliens = 55;
+	game.aliens = new Alien[game.num_aliens];
+
+	game.player.x = 107;
+	game.player.y = 32;
+
+	game.player.life = 3;
+
+	for(size_t yi = 0; yi < 5; ++yi)
+		for (size_t xi = 0; xi < 11; ++xi) {
+			game.aliens[yi * 11 + xi].x = 16 * xi + 20;
+			game.aliens[yi * 11 + xi].y = 17 * yi + 128;
+		}
+
 	uint32_t clear_color = rgb_to_uint32(0, 128, 0);
 	
+	int player_move_direction = 1;
 
 	while (!glfwWindowShouldClose(window)) {
 		buffer_clear(&buffer, clear_color);
 
-		buffer_draw_sprite(&buffer, alien_sprite, 112, 128, rgb_to_uint32(128, 0, 0));
+		for (size_t ai = 0; ai < game.num_aliens; ++ai) {
+			const Alien& alien = game.aliens[ai];
+			size_t current_frame = alien_animation->time / alien_animation->frame_duration;
+			const Sprite& sprite = *alien_animation->frames[current_frame];
+
+			buffer_draw_sprite(&buffer, sprite, alien.x, alien.y, rgb_to_uint32(128, 0, 0));
+		}
+
+		buffer_draw_sprite(&buffer, player_sprite, game.player.x, game.player.y, rgb_to_uint32(128, 0, 0));
+
+		alien_animation->time++;
+
+		if (alien_animation->time == alien_animation->num_frames * alien_animation->frame_duration) {
+			if (alien_animation->loop) alien_animation->time = 0;
+			
+			else {
+				delete alien_animation;
+				alien_animation = nullptr;
+			}
+		}
 
 		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, buffer.width, buffer.height, GL_RGBA,
 						GL_UNSIGNED_INT_8_8_8_8, buffer.data
@@ -293,7 +408,26 @@ int main() {
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 3);
 
 		glfwSwapBuffers(window);
+		
+		 
+		// horizontal, if the value is positive, it points to right; otherwise, left
+
+		if (game.player.x + player_sprite.width + player_move_direction >= game.width - 1) {
+			game.player.x = game.width - 1 - player_sprite.width - player_move_direction;
+			player_move_direction *= -1;
+		}
+
+		else if (game.player.x + player_move_direction <= 0) {
+			game.player.x = 0;
+			player_move_direction *= -1;
+		}
+
+		else game.player.x += player_move_direction;
+
 		glfwPollEvents();
+		glfwSwapInterval(1);
+
+		//To turn on V-sync to lock the refresh rate so that the game can run slower
 	}
 
 	glfwDestroyWindow(window);
@@ -301,8 +435,13 @@ int main() {
 
 	glDeleteVertexArrays(1, &fullscreen_triangle_vao);
 
-	delete[] alien_sprite.data;
+	delete[] alien_sprite0.data;
+	delete[] alien_sprite1.data;
+	delete[] alien_animation->frames;
 	delete[] buffer.data;
+	delete[] game.aliens;
+
+	delete alien_animation;
 
 	return 0;
 }
